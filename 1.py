@@ -8,6 +8,23 @@ import os
 # ==========================================
 # 1. セッション状態（データ保持）の初期化
 # ==========================================
+
+# --- 1. セッション状態の初期化（ファイルから読み込む） ---
+SAVE_FILE = "save_data.csv"
+
+if 'point_owners' not in st.session_state:
+    if os.path.exists(SAVE_FILE):
+        try:
+            # 保存ファイルからデータを読み込む
+            df_save = pd.read_csv(SAVE_FILE)
+            # { "スポット名": "color" } の辞書形式に変換
+            st.session_state.point_owners = dict(zip(df_save['spot'], df_save['team']))
+        except:
+            st.session_state.point_owners = {}
+    else:
+        st.session_state.point_owners = {}
+
+
 if 'ward_owners' not in st.session_state:
     all_wards = [
         "千代田区", "中央区", "港区", "新宿区", "文京区", "台東区", "墨田区", 
@@ -168,12 +185,40 @@ if st.session_state.selected_pin:
     if current_p_owner == my_team:
         st.info(f"ここはすでに {my_team} チームが制圧しています。")
     else:
-        if st.button(f"🚩 {clicked_spot} にチェックインする！", use_container_width=True):
+        if st.button(f"🚩 {clicked_spot} にチェックイン！"):
+            # 1. セッション状態を更新
             st.session_state.point_owners[clicked_spot] = my_team
-            st.success(f"{clicked_spot} を制圧しました！")
+            
+            # 2. ファイルに保存する
+            # 辞書をデータフレームに変換してCSV保存
+            new_save_df = pd.DataFrame([
+                {"spot": k, "team": v} for k, v in st.session_state.point_owners.items()
+            ])
+            new_save_df.to_csv(SAVE_FILE, index=False, encoding="utf-8")
+            
+            st.success(f"{clicked_spot} を制圧し、ファイルに保存しました！")
             st.session_state.selected_pin = None
-            st.rerun() # 地図を再描画して最新の色を反映
-    
+            st.rerun()
+
     if st.button("キャンセル"):
         st.session_state.selected_pin = None
         st.rerun()
+
+# --- 7. 管理者用データ初期化機能 ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("🛠️ 管理者メニュー")
+admin_password = st.sidebar.text_input("リセット用パスワード", type="password")
+
+# パスワードが正しい場合のみボタンを表示（例として "reset123" と設定）
+if admin_password == "987654321":
+    if st.sidebar.button("⚠️ データを初期化する", help="すべてのチェックイン情報を削除します"):
+        # 1. セッション状態を空にする
+        st.session_state.point_owners = {}
+        
+        # 2. 保存用CSVファイルを初期化（ヘッダーのみにする）
+        df_reset = pd.DataFrame(columns=['spot', 'team'])
+        df_reset.to_csv(SAVE_FILE, index=False, encoding="utf-8")
+        
+        st.sidebar.success("データを初期化しました。")
+        st.rerun() # 地図と色を即座にリセット
+
